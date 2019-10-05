@@ -1,6 +1,8 @@
 # 2019_Data-Science
 
-### Homework for Data Science by Professor Shin.
+### Homework of lecture "Data Science"
+### Lectures by Professor Shin
+### Codes by Bae
 
 1. R markdown
 
