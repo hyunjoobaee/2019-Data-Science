@@ -1,0 +1,347 @@
+---
+title: "HW2"
+author: "배현주"
+date: "10/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA)
+rm(list=ls())
+```
+
+
+### 1. Use nycflights13 package and the flights data to answer the following questions.
+
+Load necessary packages.
+```{r packages, message=FALSE}
+library(nycflights13)
+library(tidyverse)
+library(ggplot2)
+library(data.table)
+library(lubridate)
+```
+<br />
+
+
+#### 1) What month had the highest proportion of cancelled flights?
+```{r}
+colnames(flights)
+```
+<br />
+
++ Make variables for the number of total flights and cancelled flights, and the proportion.
+```{r}
+cancelled <- flights %>%
+  select(month, dep_delay, arr_delay) %>%
+  group_by(month) %>%
+  mutate(total_flights = n()) %>%
+  filter(is.na(dep_delay)|is.na(arr_delay)) %>%
+  group_by(month) %>%
+  mutate(cancel_flights = n(), prop = cancel_flights/total_flights) 
+cancelled
+```
+<br />
+
++ Select the month and prop variables and find the highest proportion of the cancelled flights.
+```{r}
+cancelled %>%
+  select(month, prop) %>%
+  unique() %>%
+  arrange(desc(prop)) %>%
+  head(1)
+```
+Februrary in 2013 had the highest proportion of the cancelled flights.
+<br />
+
+
+#### 2) What plane (specifed by the tailnum variable) traveld the most times from NY city airports in 2013? Plot the number of trips per week over the year.
+
+
++ Find the plane traveled the most times from NY city airports in 2013.
+```{r}
+flights %>%
+  filter(!is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay)) %>%
+  group_by(tailnum) %>%
+  summarise(N = n()) %>%
+  filter(N == max(N))
+```
+"N725MQ" plane traveled 544 times.
+
+<br />
+
++ To plot the number of trips per week over the year, the variable for "Dates" was made by using "year", "month", "day". "N" represents the number of traveled times of the plane in each date.
+```{r}
+N725MQ <- flights %>%
+  mutate(Dates = as.Date(paste(year, month, day, sep=":"), "%Y:%m:%d")) %>%
+  filter(!is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay), tailnum =="N725MQ") %>%
+  group_by(Dates, tailnum) %>%
+  summarise(N = n())
+head(N725MQ, 10)
+```
+<br />
+
++ Also the "week" variable was made for representing the week number of each date.
+```{r}
+first <- as.Date("2013:01:01", "%Y:%m:%d")
+end <- as.Date("2013:12:31", "%Y:%m:%d")
+dates <- seq(first, end, by ="1 day")
+week <- data.frame(Dates = dates, Week = week(dates)); head(week, 10)
+```
+<br />
+
++ Two dataframes "N725MQ" and "week" were merged by the key "Dates".
+```{r}
+N725MQ_per_week <- N725MQ %>%
+  select(Dates, N) %>%
+  full_join(week, by = "Dates") %>%
+  group_by(Week) %>%
+  summarise(times_per_week = sum(N))
+head(N725MQ_per_week, 10)
+```
+<br />
+
++ Missing values were imputed by 0 because NAs mean there's no plane on that week.
+```{r}
+N725MQ_per_week[is.na(N725MQ_per_week$times_per_week), "times_per_week"] <- 0
+head(N725MQ_per_week, 10)
+```
+<br />
+
++ Plot the number of trips of the plane "N725MQ" per week.
+```{r}
+ggplot(data = N725MQ_per_week) +
+  geom_point(mapping = aes(x=Week, y=times_per_week, group = 1)) +
+  labs(title = "Number of trips per week over 2013",
+       subtitle = "the most traveled plane tailnum N275MQ",
+       x = "weeks in 2013", ylab = "Number of trips") +
+  scale_x_continuous(minor_breaks = seq(1, 53, 1),
+                     breaks = seq(1, 53, 1),
+                     labels = paste("week", c(1:53), sep="")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+<br />
+<br />
+<br />
+
+### 2. Use nycflights13 package and the flights and planes data to answer the following questions.
+
+#### 1) What is the oldest plane (specified by tailnum variable) that flew from NY City airports in 2013? How many airplanes that flew from NY City are included in the plane data?
+```{r}
+rm(list=ls())
+colnames(planes)
+colnames(planes)[2] <- "year_manufactured"
+
+oldest <- flights %>%
+  filter(!is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay)) %>%
+  inner_join(planes, by="tailnum") %>%
+  group_by(tailnum) %>%
+  select(tailnum, year_manufactured) %>%
+  mutate(age = 2013 - year_manufactured + 1)
+
+oldest[which.max(oldest$age), ]
+```
+The plane "N381AA" is the oldest plane.
+<br />
+<br />
+
++ By merging the data "flights" and "planes" (inner_join), the number of planes that are inclued in the plane data can be calculated.
+```{r}
+flights %>% 
+  inner_join(planes, by="tailnum") %>%
+  filter(!is.na(arr_time), !is.na(dep_delay), !is.na(arr_delay)) %>%
+  select(tailnum) %>%
+  summarise(N = n())
+```
+After removing the cancelled flights, 279017 flights that flew from NY airports in 2013 were included in the plane data.
+<br />
+<br />
+
+#### 2) How many planes have a missing date of manufactures? 
++ Merge the data flights and planes, and filter the missing year.
+```{r}
+flights %>%
+  full_join(planes, by="tailnum") %>%
+  select(tailnum, year_manufactured) %>%
+  filter(is.na(year_manufactured)) %>%
+  unique() %>%
+  summarise(N = n()) 
+```
+792 planes have missing manufactured date.
+<br />
+<br />
+
+#### What are the five most common manufacturers? 
++ Sort the manufacturers with the number of planes manufactured.
+```{r}
+planes %>%
+  group_by(manufacturer) %>%
+  summarise(N = n()) %>%
+  arrange(desc(N)) %>%
+  head(5)
+```
+BOEING, AIRBUST INDUSTRIE, BOMBARDIER INC, AIRBUS, EMBRAER are top 5 common manufactureres.
+<br />
+<br />
+
+
+#### Has the distribution of manufacturer changed over time as reflected by the airplanes flying from NYC in 2013? (You may need to recode the manufacturer name and collapse rare vendors into a category called Other.)
++ Filter the rare manufacturers.
+```{r}
+low_manu <- planes %>%
+  select(manufacturer) %>%
+  group_by(manufacturer) %>%
+  summarise(N = n())%>%
+  filter(N < 5 | N == 5) 
+```
+<br />
+
++ Prepare the data for the distribution plot and change the names of rare manufactureres into "OTHER".
+```{r}
+manu_dist <- planes %>%
+  group_by(manufacturer, year_manufactured) %>%
+  summarise(N = n()) %>%
+  arrange(desc(N)) %>%
+  na.omit() 
+manu_dist$manufacturer[manu_dist$manufacturer %in% low_manu$manufacturer] <- "OTHER"
+```
+<br />
+
++ Plot the distribution of manufacturers changed over time.
+```{r}
+manu_plot <- ggplot(data = manu_dist) +
+  geom_line(mapping = aes(x = year_manufactured, y = N, color = manufacturer)) +
+  ggtitle("Distiribution of manufacturer changed over time") +
+  xlab("Year") +
+  ylab("Number of planes manufactured") 
+manu_plot
+```
+
+<br />
+
+### 3. Use nycflights13 package and the weather data to answer the following questions.
+```{r}
+rm(list=ls())
+colnames(weather)
+```
+<br />
+
+#### 1) What is the distribution of temperature in July, 2013? 
+```{r}
+july_2013 <- weather %>% 
+  mutate(Dates = as.Date(paste(year, month, day, sep=":"), format="%Y:%m:%d"),
+         Time = paste(Dates, hour, "hour")) %>%
+  filter(year == 2013, month == 7) %>%
+  select(Time, temp) 
+```
+
+```{r}
+temp_plot <- ggplot(data = july_2013) +
+  geom_line(mapping = aes(x = Time, y = temp), color = "red") +
+  labs(title = "Distribution of temperature",
+       sub_title = "2013 July",
+       xlab = "time",
+       ylab = "temperature") +
+  scale_x_discrete(breaks = seq(1, 31, 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+temp_plot
+```
+<br />
+
+#### Identify any important outliers in terms of the warm_speed variable. 
+```{r}
+date_max <- weather$time_hour[which.max(weather$wind_speed)] 
+wind_plot <- ggplot(data = weather) +
+  geom_line(mapping = aes(x = time_hour, y = wind_speed), color = "blue") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank()) + 
+  labs(title = "Distribution of wind speed",
+       xlab = "time",
+       ylab = "wind_speed") 
+wind_plot
+weather %>%
+  select(origin, time_hour, wind_speed) %>%
+  arrange(desc(wind_speed)) %>%
+  head(1)
+```
+In EWR, the wind_speed was 1048.361 at 2013-02-12 03:00.
+<br />
+
+#### What is the relationship between dewp and humid?
+```{r}
+dew_hum <- weather %>%
+  select(year, month, day, dewp, humid) %>%
+  na.omit() %>%
+  group_by(year, month, day)%>%
+  summarise(dewp = mean(dewp), humid = mean(humid))
+
+dewp_humid_plot <- ggplot(data = dew_hum, mapping = aes(x=dewp, y=humid)) +
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(title = "The relationship between dewp and humid",
+       xlab = "dewp",
+       ylab = "humid")
+dewp_humid_plot
+```
+To see the relationship between dewp and humid more explicitly, the mean of dewp and humid based on dates were calculated. Then the plot between dewp and humid was represented and each points are mean values. 
+<br />
+<br />
+
+#### 2) On how many days was there precipitation in the NY are in 2013? 
+```{r}
+weather %>%
+  filter(precip != 0) %>%
+  select(year, month, day) %>%
+  unique() %>%
+  summarise(N = n())
+```
+There was precipitation for 141 days in 2013 NY.
+<br />
+
+
+#### Were there difrerences in the mean visibility (visib) based on the day of the week and/or month of the year?
++ Plot will help see the differences in the mean visibility. First the plot x-axis based on the day of the week was made.
+```{r}
+day_mean <- weather %>%
+  mutate(Dates = as.Date(paste(year, month, day, sep=":"), format="%Y:%m:%d"),
+         weekday = wday(Dates, label=TRUE)) %>%
+  group_by(weekday) %>%
+  summarise(day_mean = mean(visib))
+
+day_plot <- ggplot(data = day_mean) +
+  geom_bar(mapping = aes(x=weekday, y=day_mean), stat="identity", fill="dodgerblue2") +
+  ggtitle("Mean Visibility \nbased on the day of the week") +
+  xlab("Days") +
+  ylab("Mean Visibility") +
+  ylim(c(0,10))
+day_plot
+
+```
+There seem little differences in mean visibility based on the days.
+<br />
+
++ The plot x-axis based on the month of the year was made.
+```{r}
+month_mean <- weather %>%
+  select(month, visib) %>%
+  group_by(month) %>%
+  summarise(month_mean = mean(visib))
+month_mean
+
+month_plot <- ggplot(data = month_mean) +
+  geom_bar(mapping = aes(x=month, y=month_mean), stat="identity", fill="darkgreen") +
+  ggtitle("Mean Visibility \nbased on the month of the year") +
+  xlab("Months") +
+  ylab("Mean Visibility") +
+  coord_cartesian(xlim = c(1:12)) +
+  scale_x_continuous(minor_breaks = seq(1, 12, 1),
+                     breaks = seq(1, 12, 1),
+                     labels = c(format(ISOdate(2004,1:12,1),"%B"))) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+month_plot
+```
+There seems mean differences of visibility between the months in 2013.
+
+
+
+
