@@ -1,0 +1,110 @@
+---
+title: "HW3"
+author: "2019020336 배현주"
+date: "10/13/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA)
+rm(list=ls())
+```
+
+```{r, message=FALSE, comment=NA}
+library(janeaustenr)
+library(tidytext)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(scales)
+library(ggplot2)
+library(corrplot)
+library(tidyverse)
+library(textdata)
+library(proxy)
+austen <- austen_books()
+```
+<br />
+
+### 1. Conduct preprocessing including tokenization (using unnest_tokens) and removing stopwords (using data(stop_words)).
+```{r}
+austen_pre <- austen %>% 
+  group_by(book) %>%
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, 
+                                     regex("^chapter [\\divslc]", 
+                                           ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text) %>%
+  mutate(word = str_extract(word, "[a-z']+")) %>%
+  filter(!is.na(word)) %>%
+  anti_join(stop_words) 
+head(austen_pre)
+```
+<br />
+
+### 2. Caculate the term-document maxtrix whose column is novel (Document), row is word, and value is word frequency.
+```{r}
+austen_freq <- austen_pre %>%
+  group_by(book) %>%
+  count(word, sort=TRUE) %>%
+  spread(key="book", value="n", fill=0)
+head(austen_freq)
+```
+<br />
+
+### 3. Given the term-document maxtrix, each novel is represented as a vector (which is sparse). Find two-most similar and different novels. Justify your answers.
++ correlation matrix
+```{r}
+austen_corr <- austen_freq %>%
+  column_to_rownames("word") %>%
+  as.matrix() %>%
+  cor()
+corrplot(austen_corr, cl.lim = c(0.35, 1),
+         addCoef.col = "black", diag = FALSE)
+```
+By calculating the correlation matrix of the word frequency in each books, the most similar books are 'Pride & Prejudice' and 'Northanger Abbey'. On the other hand, the most different books are 'Sense & Sensibility' and 'Persuasion'.
+<br />
+
+<!-- + cosine similarity -->
+<!-- ```{r} -->
+<!-- austen_cos <- austen_freq[, -1] -->
+<!-- austen_cos <- as.matrix(dist(t(austen_cos), method="cosine"))   -->
+<!-- diag(austen_cos) <- NA   -->
+<!-- austen_cos -->
+<!-- apply(austen_cos, 2, mean, na.rm=TRUE)   -->
+<!-- ``` -->
+<!-- Each numeric  -->
+<!-- <br /> -->
+
++ sentiment analysis plot (nrc)
+```{r, message = FALSE}
+austen_nrc <- austen_pre %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(book, index = linenumber %% 80, sentiment) %>%
+  group_by(book, sentiment) %>%
+  summarise(N = sum(n))
+
+austen_nrc %>%
+  group_by(book) %>%
+  filter(N == min(N) | N == max(N))
+
+ggplot(austen_nrc, aes(sentiment, N, fill=book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ book, ncol = 3, scales = "free_x") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+<br />
+By using "nrc" sentiment lexicon, it is possible to draw the distribution of sentiments in books. 'Disgust' & 'Positive' are common lowest & highest counts in books. By comparing the distribution of each books (usually based on the peak points), "Mansfield Park" and "Emma" are most similar books. On the other hand, "Mansfield Park" and "Persuasion" are most different books.
+<br />
+
+
+
+
+
+
+
+
+
+
+
